@@ -1,5 +1,5 @@
 ---
-title: "What is the factor of a good quality coffee"
+title: "What is the factor of a good quality coffee Revised"
 author: "Group 12"
 date: "`r Sys.Date()`"
 output:
