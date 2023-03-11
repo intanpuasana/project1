@@ -1,0 +1,194 @@
+---
+title: "What is the factor of a good quality coffee"
+author: "Group 12"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    latex_engine: pdflatex
+    number_sections: no
+  html_document:
+    df_print: paged
+fig_caption: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, eval = TRUE, warning = FALSE, message = FALSE, comment = NA)
+```
+
+```{r libraries}
+library(tidyverse)
+library(moderndive)
+library(gapminder)
+library(sjPlot)
+library(stats)
+library(jtools)
+library(MASS)
+library(knitr)
+library(ggplot2)
+library(dplyr)
+library(janitor)
+
+```
+
+# Introduction {#sec:Intro}
+For this research we want to know what is the factor that influence the quality of coffee. First we want to look at the distribution of the data.
+
+```{r}
+coffee_data <- read.csv("dataset12.csv")
+```
+### The Country origin of the coffee
+
+Below is the percentage of good and bad quality coffee for each origin of the coffee.
+```{r}
+coffee_data %>% 
+  tabyl(country_of_origin, Qualityclass) %>% 
+  adorn_percentages() %>% 
+  adorn_pct_formatting() %>% 
+  adorn_ns()
+
+```
+From the figure below, we can see that the good quality coffee come from the countries with gradient red, orange and green, meanwhile the poor quality coffee come from the countries with gradient blue and pink.
+```{r}
+
+ggplot(coffee_data, aes(y = Qualityclass)) +
+  geom_bar(aes(fill = country_of_origin), position = position_stack(reverse = TRUE)) +
+  theme(legend.position = "top")+
+  scale_color_gradient(low = "yellow", high = "green")+
+  labs(x = "Proportion of Country of Origin", y = "Quality of Coffee")
+```
+
+
+
+
+
+
+###  The Aroma of the coffee
+
+Another variable of interest is the aroma of the coffee, here we want to see how the aroma of the coffee distributed around the quality of the coffee.
+
+
+```{r}
+ggplot(data = coffee_data, aes(x = Qualityclass, y = aroma)) +
+  geom_boxplot() +
+  labs(title = "Quality score of coffee samples by aroma",
+       x = "Aroma",
+       y = "Qualityclass")
+```
+Rescale the distribution of Aroma of the coffee
+
+It is hard to get the picture of the distribution, because of the present of outlier in this distribution. So we try to rescale the boxplot to get better visual of the distribution.
+From the boxplot below we can see that poor quality coffee has lower value of the aroma of the coffee. 
+```{r}
+ggplot(data = coffee_data, aes(x = Qualityclass, y = aroma)) +
+  geom_boxplot() +
+  scale_y_continuous(limits = quantile(coffee_data$aroma, c(0.05, 0.95)))+
+  labs(title = "Quality score of coffee samples by aroma (Rescale)",
+       x = "Quality Class",
+       y = "Aroma")
+```
+
+
+### Flavour
+
+
+```{r}
+ggplot(data = coffee_data, aes(x = Qualityclass, y = flavor)) +
+  geom_boxplot() +
+  scale_y_continuous(limits = quantile(coffee_data$flavor, c(0.05, 0.95)))+
+  labs(title = "Quality score of coffee samples by flavor (Rescale)",
+       x = "Quality Class",
+       y = "flavor")
+```
+
+
+
+
+### Acidity
+
+
+```{r}
+ggplot(data = coffee_data, aes(x = Qualityclass, y = acidity)) +
+  geom_boxplot() +
+  scale_y_continuous(limits = quantile(coffee_data$acidity, c(0.05, 0.95)))+
+  labs(title = "Quality score of coffee samples by acidity (Rescale)",
+       x = "Quality Class",
+       y = "acidity")
+```
+
+
+
+
+### category_two_defects
+
+
+```{r}
+ggplot(data = coffee_data, aes(x = Qualityclass, y =    category_two_defects)) +
+  geom_boxplot() +
+  scale_y_continuous(limits =   quantile(coffee_data$category_two_defects, c(0.05, 0.95)))+
+  labs(title = "Quality score of coffee samples by category_two_defects (Rescale)",
+       x = "Quality Class",
+       y = "category_two_defects")
+```
+
+
+
+
+### altitude_mean_meters 
+
+
+
+```{r}
+ggplot(data = coffee_data, aes(x = Qualityclass, y =    altitude_mean_meters)) +
+  geom_boxplot() +
+  scale_y_continuous(limits =   quantile(coffee_data$altitude_mean_meters, c(0.05, 0.95),na.rm = TRUE))+
+  labs(title = "Quality score of coffee samples by altitude_mean_meters (Rescale)",
+       x = "Quality Class",
+       y = "altitude_mean_meters")
+```
+
+
+
+### Year Harvested
+```{r}
+ggplot(data = coffee_data, aes(x = Qualityclass, group = harvested)) + 
+  geom_bar(aes(y = ..prop.., fill = harvested), 
+           stat = "count", position = "dodge") + 
+  scale_color_gradient(low = "red", high = "green")+
+  labs(x = "Quality of Coffee", y = "Proportion")
+```
+
+
+
+### Using Generalized Linear Model
+
+
+### Model 1
+```{r}
+coffee_data$binary_response <- ifelse(coffee_data$Qualityclass == "Good", 1, 0)
+mod.coffee1 <- glm(binary_response ~ country_of_origin +
+                    aroma + flavor + acidity + category_two_defects +
+                    altitude_mean_meters + harvested, 
+                  data = coffee_data, family = binomial(link = "logit")) 
+mod.coffee1 %>% summary()
+```
+
+
+
+### Model 2
+```{r}
+mod.coffee2 <- glm(binary_response ~ aroma + flavor + acidity +  category_two_defects + altitude_mean_meters + harvested, 
+                  data = coffee_data, family = binomial(link = "logit")) 
+mod.coffee2 %>% summary()
+
+plot_model(mod.coffee2, show.values = TRUE, title = "", show.p = FALSE, value.offset = 0.25)
+```
+
+
+### Model 3
+```{r}
+mod.coffee3 <- glm(binary_response ~ aroma + flavor + acidity +    altitude_mean_meters + harvested, 
+                  data = coffee_data, family = binomial(link = "logit")) 
+mod.coffee3 %>% summary()
+
+plot_model(mod.coffee3, show.values = TRUE, title = "", show.p = FALSE, value.offset = 0.25)
+```
