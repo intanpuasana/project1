@@ -1,0 +1,282 @@
+---
+title: "Modelling suicide rate: Using linear models to examine factors that influence suicidal tendencies"
+author: "Group_12"
+output:
+  pdf_document:
+    latex_engine: pdflatex
+    number_sections: yes
+  html_document:
+    df_print: paged
+fig_caption: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, eval = TRUE, warning = FALSE, message = FALSE, comment = NA)
+```
+
+```{r loadpackages, echo=TRUE, warning=FALSE, message=FALSE}
+library(tidyr)
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(GGally)
+```
+
+
+# Introduction {#sec:Intro}
+Suicide is a significant public health concern worldwide, and identifying the factors that influence suicidal tendencies is critical for effective prevention strategies. The current study conducted by Group 12 aims to model the suicide rate and examine the factors that contribute to suicidal tendencies through linear models.
+All data used in this research were obtained from ourworldindata.org. The analysis of the data involved a step-by-step approach, resulting in the development of a linear model with suicide rate as the response variable and six explanatory variables.
+It is noteworthy that the study included six different explanatory variables, each with the potential to form individual objectives. However, the complexity of estimating suicide rates led us to incorporate all variables into one model, forming a comprehensive objective. This approach is deemed more valuable than having six objectives composed of single variables.
+The research methodology employed in this study adheres to rigorous academic standards of statistical modeling and analysis. Overall, this study aims to contribute to a better understanding of the complex factors that influence suicide rates and inform evidence-based interventions to reduce suicidal tendencies.
+
+
+## Primary Objective 
+Estimate Suicide Rate in various countries based on Birth Rate, Death Rate, Population, Literacy Rate, GDP and Alcohol Use Disorder Rate.
+
+## Secondary Objectives
+From the perspective of data correlation, access whether the above variables have substantially influenced the suicide rate.
+
+## Brief Explanation of the Data {#sec:EotD}
+The Group12 downloaded the suicide rate, birth rate, death rate, population, literacy rate, GDP per capital and alcohol use disorder rate of 89 countries and regions around the world from 2000 to 2019 from ourworldindata.org.Here is the brief explanation of the data:
+
+Variable                  | Expalnation    
+:------------------------:|:------------------------------
+ Suicidal_Rate            | The percentage of suicide deaths to the total population of a country or region in one year (per 100,000 population)
+ Birth_Rate               | The percentage of the number of births in a country or region to the total population of that country or region in one year
+ Death_Rate               | The percentage of the number of deaths in a country or region to the total population of that country or region in one year
+ Population               | The total population of a country or region in one year
+ Literacy_Rate            | The number of people aged 15 and over in a country or territory who can read and write in one year as a percentage of the population aged 15 and over in that country or territory during the same time period           
+ GDP_per_Capita           | The per capita GDP of a country or region in USD
+ Alcohol_Use_Disorder_Rate| The percentage of the number of people who meet the diagnostic criteria for alcohol use disorder in a country or region to the total population of that country or region in one year
+ Table: \label{tab:BEofD}Brief Explanation of the Data.
+
+# Merging and Organizing Datasets {#sec:Merging}
+Group12 downloaded 6 datasets from ourworldindata.org and merged them using R.
+
+## Reading Datasets
+```{r read1, echo=TRUE, eval=TRUE, warning=FALSE, message=FALSE}
+#Reading Data set 
+DAS_Data =  read.csv("Group_12_Data_01.csv")      #Suicide Data set (Main Data)
+DAS_Data2 = read.csv("Group_12_Data_02.csv")      #Suicide by Age Detail Data set 
+DAS_Data3 = read.csv("Group_12_Data_03.csv")      #Birth and Death Rate Data set
+DAS_Data4 = read.csv("Group_12_Data_04.csv")      #GDP per Capita Data set
+DAS_Data5 = read.csv("Group_12_Data_05.csv")      #Alcohol Use Disorder Data set
+DAS_Data6 = read.csv("Group_12_Data_06.csv")      #Literacy Rate Data set
+```
+
+## Merging Datasets
+Due to the fact that some of the data was collected a long time ago and contained a significant amount of missing data, we ultimately decided to choose data from the period of 2014 to 2018 as the dataset for our study.
+```{r merge, echo=TRUE, eval=TRUE, warning=FALSE, message=FALSE}
+#Sub-setting Data set by specific year and country
+DAS_Data <- subset(DAS_Data, Year %in% c(2014, 2015, 2016, 2017, 2018) &
+                     Code %in% c("ALB","DZA","AGO","ARM","AZE","BHR","BRB", "BLR","BIH","BWA",
+                                 "BRA","BGR","CPV","CHL","CHN","COL","COM","CRI","CIV","HRV",
+                                 "CUB","CYP","DOM","ECU","EGY","SLV","EST","SWZ","ETH","GEO",
+                                 "GRC","GTM","GNB","HND","HUN","IDN","IRN","IRQ","ISR","ITA",
+                                 "JAM","JOR","KAZ","KWT","KGZ","LVA","LBN","LBY","LTU","MLT",
+                                 "MUS","MEX","MDA","MNG","MNE","MOZ","NIC","PRK","MKD","PAN",
+                                 "PER","POL","PRT","QAT","ROU","RUS","SAU","SRB","SYC","SGP",
+                                 "SVN","ZAF","KOR","ESP","LKA","SYR","TJK","THA","TTO","TUN",
+                                 "TUR","TKM","UKR","ARE","URY","UZB","VEN","VNM","YEM"
+                     ))
+
+#Creating key for join purpose
+DAS_Data$key <- paste(DAS_Data$Code,DAS_Data$Year)
+DAS_Data <- DAS_Data %>% relocate(key, .before = Code)
+DAS_Data2$key <- paste(DAS_Data2$Code,DAS_Data2$Year)
+DAS_Data2 <- DAS_Data2 %>% relocate(key, .before = Code)
+DAS_Data3$key <- paste(DAS_Data3$Code,DAS_Data3$Year)
+DAS_Data3 <- DAS_Data3 %>% relocate(key, .before = Code)
+DAS_Data4$key <- paste(DAS_Data4$Code,DAS_Data4$Year)
+DAS_Data4 <- DAS_Data4 %>% relocate(key, .before = Code)
+DAS_Data5$key <- paste(DAS_Data5$Code,DAS_Data5$Year)
+DAS_Data5 <- DAS_Data5 %>% relocate(key, .before = Code)
+DAS_Data6$key <- paste(DAS_Data6$Code,DAS_Data6$Year)
+DAS_Data6 <- DAS_Data6 %>% relocate(key, .before = Code)
+
+#Using Left Join to merge 2 datasets
+DAS_Data <- left_join(DAS_Data,DAS_Data2, by = "key")
+DAS_Data <- left_join(DAS_Data,DAS_Data3, by = "key")
+DAS_Data <- left_join(DAS_Data,DAS_Data4, by = "key")
+DAS_Data <- left_join(DAS_Data,DAS_Data5, by = "key")
+DAS_Data <- left_join(DAS_Data,DAS_Data6, by = "key")
+
+#Dropping redundant and unnecessary column
+str(DAS_Data)
+DAS_Data <- DAS_Data %>% select(-one_of('Entity.y', 'Code.y','Year.y',
+                                   'Deaths...Self.harm...Sex..Both...Age..All.Ages..Rate.',
+                                   'Entity.x.x', 'Code.x.x','Year.x.x','Continent',
+                                   'Entity.y.y','Code.y.y','Year.y.y','X417485.annotations',
+                                   'Entity.x.x.x','Code.x.x.x','Year.x.x.x',
+                                   'Entity','Code','Year',
+                                   'Entity.y.y.y','Code.y.y.y','Year.y.y.y'
+                                   )) 
+
+#Renaming column
+str(DAS_Data)
+DAS_Data <- DAS_Data %>%
+  rename(
+    Entity = Entity.x,
+    Code = Code.x,
+    Year = Year.x,
+    Suicidal_Rate = Indicator.Age.standardized.suicide.rates..per.100.000.population....Sex.Both.sexes,
+    Suicidal_Rate_70_years = Deaths...Self.harm...Sex..Both...Age..70..years..Rate.,
+    Suicidal_Rate_50.69_years = Deaths...Self.harm...Sex..Both...Age..50.69.years..Rate.,
+    Suicidal_Rate_5.14_years = Deaths...Self.harm...Sex..Both...Age..5.14.years..Rate.,
+    Suicidal_Rate_15.49_years = Deaths...Self.harm...Sex..Both...Age..15.49.years..Rate.,
+    Birth_Rate = Birth.rate...Sex..all...Age..all...Variant..estimates,
+    Death_Rate = Death.rate...Sex..all...Age..all...Variant..estimates,
+    Population = Population...Sex..all...Age..all...Variant..estimates,
+    Alcohol_Use_Disorder_Rate = Prevalence...Alcohol.use.disorders...Sex..Both...Age..Age.standardized..Percent.,
+    Literacy_Rate = Literacy.rate..adult.total....of.people.ages.15.and.above.
+  )
+
+#Treating missing data in Literacy Rate
+for(i in seq(1, to = 440, by = 5)){
+    for(j in 1:4) {
+      #Checking if data is missing
+        if (is.na(DAS_Data[(i+j),15])) {
+          #Replacing the missing data with the data from previous year
+          DAS_Data[(i+j), 15] <- DAS_Data[(i+j-1),15]   
+        }}}
+
+#Producing Final data set DAS_Data.csv
+DAS_Data = DAS_Data[,-(6:9)]
+write_csv(DAS_Data, "Group_12_Data_07.csv")
+```
+
+# Data Visualization {#sec:visualization}
+After merging the datasets, Group12 performed visualization operations on the data.
+
+```{r read2, echo=TRUE,eval=TRUE, warning=FALSE, message=FALSE}
+#Reading Final Data set 
+DAS_Data = read.csv("Group_12_Data_07.csv")
+```
+
+## Summary Datasets
+By analyzing, Group12 obtained the minimum value, median, quartiles, mean and maximum value for each variable.
+```{r summary, echo=TRUE,eval=TRUE, warning=FALSE, message=FALSE}
+summary(DAS_Data[,5:11])
+```
+
+## Visualization of Data
+Group12 performed data visualization operations to obtain regression and correlation plots for suicide rates and other variables for each year from 2014 to 2018.
+
+```{r visualization, echo=TRUE,eval=TRUE, warning=FALSE, message=FALSE}
+#subsetting the data sets by years and simplifying variables
+DAS_Data_2014 = subset(DAS_Data, Year == 2014)[,-(1:4)]
+DAS_Data_2015 = subset(DAS_Data, Year == 2015)[,-(1:4)]
+DAS_Data_2016 = subset(DAS_Data, Year == 2016)[,-(1:4)]
+DAS_Data_2017 = subset(DAS_Data, Year == 2017)[,-(1:4)]
+DAS_Data_2018 = subset(DAS_Data, Year == 2018)[,-(1:4)]
+
+#Transforming data sets into long format
+DAS_Data_2014_long = gather(DAS_Data_2014, key = "variable", value = "value", -Suicidal_Rate)
+DAS_Data_2015_long = gather(DAS_Data_2015, key = "variable", value = "value", -Suicidal_Rate)
+DAS_Data_2016_long = gather(DAS_Data_2016, key = "variable", value = "value", -Suicidal_Rate)
+DAS_Data_2017_long = gather(DAS_Data_2017, key = "variable", value = "value", -Suicidal_Rate)
+DAS_Data_2018_long = gather(DAS_Data_2018, key = "variable", value = "value", -Suicidal_Rate)
+```
+
+### Ploting 2014
+
+```{r plot2014,echo=TRUE,eval=TRUE, warning=FALSE, message=FALSE}
+#Ploting 2014
+ggplot(data = DAS_Data_2014_long, mapping = aes(x = value, y = Suicidal_Rate)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  facet_wrap(~ variable, scales = "free") +
+  labs(title = "Regression between Suicidal Rate and Other Variables of 2014",
+       x = "", y = "Suicidal Rate") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggpairs(DAS_Data_2014) +
+  theme(plot.background = element_rect(
+    fill = "transparent",
+    colour = NA,
+    size = 1))
+```
+
+From the regression plots of suicide rate and other variables in 2014, it can be seen that there is no strong correlation between suicide rate and other variables. This is also evident in the correlation plots, as the absolute values of the correlation coefficients between suicide rate and other variables are relatively small. Only the correlation coefficient between suicide rate and death rate exceeds 0.5, with a value of 0.513.
+
+### Ploting 2015
+
+```{r plot2015,echo=TRUE,eval=TRUE, warning=FALSE, message=FALSE}
+#Ploting 2015
+ggplot(data = DAS_Data_2015_long, mapping = aes(x = value, y = Suicidal_Rate)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  facet_wrap(~ variable, scales = "free") +
+  labs(title = "Regression between Suicidal Rate and Other Variables of 2015",
+       x = "", y = "Suicidal Rate") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggpairs(DAS_Data_2015) +
+  theme(plot.background = element_rect(
+    fill = "transparent",
+    colour = NA,
+    size = 1))
+```
+
+From the regression plots of suicide rate and other variables in 2015, it can be seen that there is no strong correlation between suicide rate and other variables. This is also evident in the correlation plots, as the absolute values of the correlation coefficients between suicide rate and other variables are relatively small. None of the suicide rate had a correlation coefficient of more than 0.5 with the other variables.
+
+### Ploting 2016
+
+```{r plot2016,echo=TRUE,eval=TRUE, warning=FALSE, message=FALSE}
+ggplot(data = DAS_Data_2016_long, mapping = aes(x = value, y = Suicidal_Rate)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  facet_wrap(~ variable, scales = "free") +
+  labs(title = "Regression between Suicidal Rate and Other Variables of 2016",
+       x = "", y = "Suicidal Rate") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggpairs(DAS_Data_2016) +
+  theme(plot.background = element_rect(
+    fill = "transparent",
+    colour = NA,
+    size = 1))
+```
+
+From the regression plots of suicide rate and other variables in 2016, it can be seen that there is no strong correlation between suicide rate and other variables. This is also evident in the correlation plots, as the absolute values of the correlation coefficients between suicide rate and other variables are relatively small. None of the suicide rate had a correlation coefficient of more than 0.5 with the other variables.
+
+### Ploting 2017
+
+```{r plot2017,echo=TRUE,eval=TRUE, warning=FALSE, message=FALSE}
+#Ploting 2017
+ggplot(data = DAS_Data_2017_long, mapping = aes(x = value, y = Suicidal_Rate)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  facet_wrap(~ variable, scales = "free") +
+  labs(title = "Regression between Suicidal Rate and Other Variables of 2017",
+       x = "", y = "Suicidal Rate") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggpairs(DAS_Data_2017) +
+  theme(plot.background = element_rect(
+    fill = "transparent",
+    colour = NA,
+    size = 1))
+```
+
+From the regression plots of suicide rate and other variables in 2017, it can be seen that there is no strong correlation between suicide rate and other variables. This is also evident in the correlation plots, as the absolute values of the correlation coefficients between suicide rate and other variables are relatively small. None of the suicide rate had a correlation coefficient of more than 0.4 with the other variables.
+
+### Ploting 2018
+
+```{r plot2018,echo=TRUE,eval=TRUE, warning=FALSE, message=FALSE}
+#Ploting 2018
+ggplot(data = DAS_Data_2018_long, mapping = aes(x = value, y = Suicidal_Rate)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  facet_wrap(~ variable, scales = "free") +
+  labs(title = "Regression between Suicidal Rate and Other Variables of 2018",
+       x = "", y = "Suicidal Rate") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggpairs(DAS_Data_2018) +
+  theme(plot.background = element_rect(
+    fill = "transparent",
+    colour = NA,
+    size = 1))
+```
+
+From the regression plots of suicide rate and other variables in 2018, it can be seen that there is no strong correlation between suicide rate and other variables. This is also evident in the correlation plots, as the absolute values of the correlation coefficients between suicide rate and other variables are relatively small. None of the suicide rate had a correlation coefficient of more than 0.4 with the other variables.
+
+# Conclusions {#sec:con}
+
+Based on the results of data analysis, it seems that there is not a significant correlation between suicide rate and the other variables we have collected.
