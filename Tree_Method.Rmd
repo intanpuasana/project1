@@ -1,0 +1,589 @@
+---
+title: "Group 9"
+output: pdf_document
+date: "2023-03-16"
+---
+
+\newpage
+
+```{r setup, include=FALSE, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, comment = NA)
+```
+
+```{r libraries,warning=FALSE,message=FALSE,echo=FALSE}
+library(tidyverse)
+library(moderndive)
+library(skimr)
+library(kableExtra)
+library(gridExtra)
+library(gapminder)
+library(sjPlot)
+library(stats)
+library(jtools)
+library(ggplot2)
+library(GGally)
+library(dplyr)
+library(knitr)
+library(tidyr)
+library(readr)
+library(stringr)
+library(corrplot)
+library(qdapTools)
+library(Rtsne)
+library(ggplot2)
+library(randomForest)
+```
+
+# Introduction {#sec:Intro}
+
+A movie that achieves commercial success not only provides entertainment to viewers but also generates significant profits for film companies. Various factors, such as skilled directors and experienced actors, are crucial in producing good movies. However, while renowned directors and actors may ensure expected box office earnings, they cannot guarantee a high rating on websites like IMDb.
+
+## Data description
+
+The dataset is collected from IMDb. It originally contains metadata information on 5043 movies, such as genre, director name and actor name; a full list of variable description is given below.
+
+```{r dataset, echo=FALSE, message=FALSE, warning=FALSE}
+dataset = read.csv("group_9.csv")
+```
+
+```{r variables , echo=FALSE, results='asis'}
+cat(' Table: \\label{tab:variables}Description of Variables:
+  
+| Variable| Description|
+|-----|----------|
+|movie_title |Title of the Movie|
+|duration| Duration in minutes|
+|director_name |Name of the Director of the Movie|
+|director_facebook |likes Number of likes of the Director on his Facebook Page|
+|actor_1_name |Primary actor starring in the movie|
+|actor_1_facebook_likes |Number of likes of the Actor 1 on his/her Facebook Page|
+|actor_2_name |Other actor starring in the movie|
+|actor_2_facebook_likes |Number of likes of the Actor 2 on his/her Facebook Page|
+|actor_3_name| Other actor starring in the movie|
+|actor_3_facebook_likes |Number of likes of the Actor 3 on his/her Facebook Page|
+|num_user_for_reviews| Number of users who gave a review|
+|num_critic_for_reviews |Number of critical reviews on imdb|
+|num_voted_users| Number of people who voted for the movie|
+|cast_total_facebook_likes |Total number of facebook likes of the entire cast of the movie|
+|movie_facebook_likes |Number of Facebook likes in the movie page|
+|plot_keywords| Keywords describing the movie plot|
+|facenumber_in_poster |Number of the actor who featured in the movie poster|
+|color |Film colorization. ‘Black and White’ or ‘Color’|
+|genres|Film categorization like ‘Animation’, ‘Comedy’, ‘Romance’,
+‘Horror’, ‘Sci-Fi’, ‘Action’, ‘Family’|
+|title_year |The year in which the movie is released|
+|language |English, Arabic, Chinese, French, German, Danish, Italian etc|
+|country |Country where the movie is produced|
+|content_rating |Content rating of the movie|
+|aspect_ratio| Aspect ratio the movie was made in|
+|movie_imdb_link |IMDB link of the movie|
+|gross |Gross earnings of the movie in Dollars|
+|budget |Budget of the movie in Dollars|
+|imdb_score |IMDB score of the movie on IMDB|
+')
+```
+
+\newpage
+
+# Problem statement {#sec:statement}
+
+Based on the massive movie information, it would be interesting to understand what are the important factors that make a movie more successful than others. So, we would like to analyze what kind of movies are more successful, in other words, get higher profit compared to its budget. In this project, we are defining whether a movie is successful or not by using the formula $\frac{(gross-budget)}{budget}$ and comparing it with the value we get when we do $\frac{(median gross-median budget)}{median budget}$. Further, we consider the movies that have a profit value greater than the value we get from equation 2 as successful and the rest as unsuccessful.
+
+# Exploratory data analysis {#sec:EDA}
+
+//label loading datasets Now, lets read in the data.
+
+```{r data, eval=TRUE, echo=FALSE}
+dataset=read.csv("group_9.csv")
+```
+
+```{r}
+#finding the median
+med_gross = median(dataset$gross)
+med_budget = median(dataset$budget)
+
+#threshold value taking the median
+value= (med_gross-med_budget)/med_budget
+
+
+dataset = dataset %>%
+  mutate(profit = (gross-budget)/budget) %>% #define profit
+  mutate(successful = ifelse(profit > value, 1, 0)) %>% #define success
+  mutate(successful = as.factor(successful),
+         facenumber_in_poster = as.factor(facenumber_in_poster),
+         color = as.factor(color),
+         title_year = as.factor(title_year),
+         aspect_ratio = as.factor(aspect_ratio))
+```
+
+```{r genre separate, echo=FALSE, warning=FALSE}
+dataset = dataset %>%
+  mutate(splitstackshape::cSplit_e(dataset, 'genres', sep = '|', type = 'character', fill = 0))
+
+dataset[,31:51]<- lapply(dataset[,31:51], factor)
+```
+
+Let's remove the duplicates and keep only the unique rows.
+
+```{r deleting duplicates, echo=FALSE, warning=FALSE}
+dataset <- dataset[!duplicated(dataset), ]
+```
+
+Secondly, we should remove the unwanted characters that are present in the movie title.
+
+```{r include=FALSE}
+dataset$movie_title <- gsub("Â", "", as.character(factor(dataset$movie_title)))
+str_trim(dataset$movie_title, side = "right")
+```
+
+On checking the number of unique values for the column language:
+
+```{r echo=FALSE}
+table(dataset$language,dataset$successful)
+```
+
+We can see that only English has significant number of observations. So we combine the rest under "others" and do a chi-square independence test to know whether the variable is dependent on the response variable successful or not.
+
+```{r echo=FALSE, warning=FALSE}
+languageOther <- !(dataset$language %in% c("English"))
+dataset$language[languageOther] <- "Other"
+dataset$language = as.factor(dataset$language) 
+
+idx = order(table(dataset$country),decreasing = TRUE)[1:5]  
+countries = as.data.frame(table(dataset$country))[idx,1]
+countryOther <- !(dataset$country %in% countries)
+dataset$country[countryOther] <- "Other"
+dataset$country = as.factor(dataset$country) 
+
+
+ratingOther <- (dataset$content_rating %in% c("", "Unrated","Approved","M","NC-17","Not Rated"))
+dataset$content_rating[ratingOther] <- "Other"
+```
+
+```{r chi sq tests, warning=FALSE}
+factor = dataset[, sapply(dataset, class) == 'factor']
+char = dataset[, sapply(dataset, class) == 'character']
+cdata = dataset[, sapply(dataset, class) %in% c('character', 'factor')]
+ncol(cdata)
+df = data.frame(matrix(nrow = ncol(cdata), ncol = 2)) 
+colnames(df) = c("Names", "pvalue")
+df$Names = colnames(cdata)
+for(i in 1:ncol(cdata)){
+  df$pvalue[i] = chisq.test(cdata[,i],cdata$successful,correct=F)$p.value
+}
+
+df$significant <- df$pvalue<0.05
+df
+
+```
+
+From the results, we remove variables where the p-value is greater than 0.05. So, we remove the irrelevant variables color, content rating, face number in the poster, director and actor names, along with the other unwanted variables like plot_keywords, genres and movie_imdb_link.
+
+```{r}
+dataset= dataset%>%
+  select(-c(content_rating,color,plot_keywords, movie_imdb_link, genres,
+            facenumber_in_poster,director_name, actor_1_name, actor_2_name, actor_3_name,
+            genres_Adventure, genres_Animation, genres_Biography, genres_Documentary,
+            genres_Family, genres_Fantasy, genres_Music, genres_Musical, genres_Mystery,
+            genres_Romance, `genres_Sci-Fi`, genres_Sport, genres_Western))
+
+```
+
+```{r}
+#changing the type of the variables to factor
+dataset = dataset %>%
+  mutate(language = as.factor(language),
+         country = as.factor(country))
+```
+
+```{r include=FALSE}
+
+char = dataset[, sapply(dataset, class) == 'character']
+factor = dataset[, sapply(dataset, class) == 'factor']
+ndata = dataset[, sapply(dataset, class) %in% c('integer', 'numeric')]
+cdata = dataset[, sapply(dataset, class) %in% c('character', 'factor')]
+```
+
+```{r include=FALSE}
+dataset= dataset%>%
+  select(-c(actor_1_facebook_likes,actor_2_facebook_likes,actor_3_facebook_likes,num_critic_for_reviews,num_voted_users,num_user_for_reviews))
+ndata = dataset[, sapply(dataset, class) %in% c('integer', 'numeric')]
+
+```
+
+Let's take a glimpse at the dataset.
+
+```{r}
+glimpse(dataset)
+```
+
+Now, lets have a look at the correlation plot.
+
+```{r corrplot, fig.pos = "H", fig.align = "center", fig.cap="\\label{fig:corrplot}Correlation Plot"}
+corr <- cor(ndata, use = "complete.obs") 
+corrplot(corr)
+```
+
+Further, we split the data set to training, validation and test set.
+
+```{r}
+#Train test split
+set.seed(1)
+n <- nrow(dataset)
+ind1 <- sample(c(1:n), floor(0.5*n))
+ind2 <- sample(c(1:n)[-ind1], floor(0.25*n))
+ind3 <- setdiff(c(1:n),c(ind1,ind2))
+dataset.train <- dataset[ind1,]
+dataset.valid <- dataset[ind2,]
+dataset.test  <- dataset[ind3,]
+ndata.train = dataset.train[,colnames(ndata)]
+ndata.valid = dataset.valid[,colnames(ndata)]
+ndata.test = dataset.test[,colnames(ndata)]
+```
+
+```{r summary}
+my_skim <- skim_with(numeric = sfl(hist = NULL),
+                     base = sfl(n = length))
+  my_skim(ndata.train) %>%
+  transmute(Variable=skim_variable, 
+            n = n, 
+            Mean=round(numeric.mean,2), 
+            SD=round(numeric.sd,2),
+            Min=numeric.p0, 
+            Median=numeric.p50,  
+            Max=numeric.p100,
+            IQR = numeric.p75-numeric.p50) %>%
+  kable(caption = ' Summary Statistics of the Movie Dataset',  digits = 2) %>%
+  kable_styling(font_size = 9, latex_options = "hold_position")
+```
+
+## Plots {#sec:plots}
+
+```{r histogram, fig.pos = "H", fig.align = "center",warning=FALSE}
+ggplot(ndata.train, mapping = aes(x = imdb_score, y = ..prop..)) +
+  geom_bar() +
+  xlab("IMDB Scores") +
+  ylab("Proportion")
+```
+
+From the plot above, we can see that the proportion of movies with IMDb scores between 6 and 8 are higher compared to the rest.
+
+```{r ggpairs, fig.pos = "H", fig.align = "center", fig.cap="\\label{fig:ggpairs}Scatterplot matrix", fig.height = 15, fig.width= 15,warning=FALSE,message=FALSE}
+ggpairs(ndata.train, title="Scatterplot matrix",
+        upper=list(continuous=wrap("points", alpha=0.1)),
+        lower = list(continuous = wrap("cor", size = 7)),
+        axisLabels="none")
+```
+
+```{r}
+dataset.train %>% 
+  group_by(successful) %>% 
+  summarize(mean_budget = mean(budget)) %>% 
+  ggplot(mapping = aes(x = successful, y = mean_budget, fill = successful)) + 
+  geom_col() +
+  ylab("Average Budget") +
+  xlab("Success of a movie") +
+  theme_bw()
+```
+
+```{r boxplot, fig.pos = "H", fig.align = "center", fig.cap="\\label{fig:boxplot}Boxplot", fig.height = 15, fig.width= 15}
+My_Theme = theme(plot.title = element_text(size=25),
+                 axis.text=element_text(size=20),
+                 axis.title=element_text(size=20),
+                 legend.title = element_text(size=20),
+                 legend.text = element_text(size=20))
+
+p1 <- ggplot(dataset.train, mapping = aes(x = successful, y = budget)) +
+  geom_boxplot(aes(fill = successful) )+
+  labs(x = "Success of a Movie", y = "Budget",
+       title = "Budget") + My_Theme
+
+p2 <- ggplot(dataset.train, mapping = aes(x = successful, y = gross)) +
+  geom_boxplot(aes(fill = successful)) +
+  labs(x = "Success of a Movie", y = "Gross",
+       title = "Gross") + My_Theme
+
+
+p3 <- ggplot(dataset.train, mapping = aes(x = successful, y = imdb_score)) +
+  geom_boxplot(aes(fill = successful)) +
+  labs(x = "Success of a Movie", y = "IMDB Score",
+       title = "IMDB Score") + My_Theme
+grid.arrange(p1, p2, p3)
+```
+
+```{r lang, fig.pos = "H", fig.align = "center", fig.cap="\\label{fig:lang} Barplot of Success and Language of the Movie"}
+dataset.train %>%
+  group_by(successful, language) %>%
+  count() %>%
+  group_by(successful) %>%
+  mutate(Proportion = n/sum(n)) %>%
+  ggplot(aes(x = successful, y = Proportion, fill = language)) +
+  geom_bar(position = 'dodge', stat = 'identity') +
+  labs(y = "Proportion",
+       x = "Success",
+       fill = "language")
+```
+
+```{r prop2}
+dataset.train %>%
+  group_by(successful, language) %>%
+  count() %>%
+  group_by(successful) %>%
+  mutate(Proportion = n*100/sum(n)) %>%
+  kable(caption = ' Proportion : Success and Languge') %>%
+  kable_styling(font_size = 10, latex_options = "hold_position")
+```
+
+```{r}
+# #Normalise the dataset
+# num_min = apply(dataset[,colnames(ndata)],2,min)
+# num_max = apply(dataset[,colnames(ndata)],2,max)
+# 
+# dataset.train[,colnames(ndata)] = t(apply(dataset.train[,colnames(ndata)], 1, function(x) (x-num_min)/(num_max-num_min)))
+# 
+# dataset.valid[,colnames(ndata)] = t(apply(dataset.valid[,colnames(ndata)], 1, function(x) (x-num_min)/(num_max-num_min)))
+# 
+# dataset.test[,colnames(ndata)] = t(apply(dataset.test[,colnames(ndata)], 1, function(x) (x-num_min)/(num_max-num_min)))
+# 
+# ndata.train = dataset.train[,colnames(ndata)]
+
+
+
+## Summary Statistics {#sec:summarystats}
+#Summary statistics is given in Table \ref{tab:summary}:
+```
+
+## Tree Based Method
+
+### Building the model
+
+First, we build our model to classify the successful movie by using 7 factor based on explanatory data analysis that we have done in the previous section. The 7 factors are duration, director_facebook_likes, cast_total_facebook_likes, movie_facebook_likes, gross, budget and imdb_score.
+
+```{r Building classification tree}
+library(rpart);library(rpart.plot)
+
+first_tree<-rpart(successful~duration+director_facebook_likes+cast_total_facebook_likes+movie_facebook_likes+gross+budget+imdb_score, data=dataset.train,method="class") #usemethod="class"forbuildingaclassificationtreeratherthanaregressiontree 
+```
+
+Then, we can take a look on our first tree.
+
+```{r Plotting the first tree}
+
+rpart.plot(first_tree,type=2,extra=4)
+```
+
+From our first tree, we can see that all the factor in the tree are gross and budget. This happen due to our definition of successful movie. we define whether a movie is successful or not by using the formula $\frac{(gross-budget)}{budget}$ and comparing it with the value we get when we do $\frac{(median gross-median budget)}{median budget}$ .
+
+To have more sensible classification, we build the second model by excluding the gross and budget factors.
+
+Below is the tree produce by the second model:
+
+```{r}
+
+#Building the second tree
+second_tree<-rpart(successful~duration+director_facebook_likes+cast_total_facebook_likes+movie_facebook_likes+imdb_score, data=dataset.train,method="class") #usemethod="class"forbuildingaclassificationtreeratherthanaregressiontree 
+
+rpart.plot(second_tree,type=2,extra=4)
+```
+
+We need to note that the successful movie denoted by 1 and unsuccessful movie denoted by 0. From thee we can see that first split is happening with the imdb_score variable where:
+
+• if that variable takes the value less than 7.2, we follow the tree's left branch.
+
+• if the variable takes more than or equal 7.2, then we follow the right branch.
+
+Overall, this seems really sensible (the fact that there is a high probability of getting the high score of IMDB for the successful movie and the more popular the movie the more profitable is will be).
+
+### Prunning the tree
+
+From our second tree we already get the sensible result, but to avoid over fitting model, we need to prune the tree. In order to prune the tree, we use the value of complexity parameter. Here is the table of cp:
+
+```{r}
+printcp(second_tree)
+```
+
+One of the pruning strategy is choosing the largest value of complexity parameter such that its cross-validation error is within 1 standard deviation of the minimum error. The minimum error from the table is 0.83, hence we choose value of complexity parameter = 0.03.
+
+And here is how our tree looks like:
+
+```{r}
+second_tree_pruned <- prune(second_tree, cp=.03)
+
+rpart.plot(second_tree_pruned)
+```
+
+We also can check the importance of variable that we use in our model. This is the table on the importance of variable:
+
+```{r}
+#second_tree_pruned$variable.importance
+
+# create a data frame from the variable importance output
+vi <- data.frame(variable = names(second_tree_pruned$variable.importance),
+                 importance = second_tree_pruned$variable.importance)
+
+# print the data frame
+kable(vi, format = "markdown", align = "c", row.names = FALSE)
+
+
+```
+
+From the table above, the highest importance value are imdb_score and duration. The rest of variable has low importance value so that not appear on the tree.
+
+### Making predictions on future observations
+
+Finally, we use our model to predict the future observation.
+
+```{r}
+
+newtest <-dataset.test[,c("successful","duration", "director_facebook_likes", "cast_total_facebook_likes", "movie_facebook_likes", "imdb_score")]
+
+newtest$SuccessProb<-predict(second_tree_pruned,newdata=newtest,type="prob") 
+
+newtest$SuccessClass<-predict(second_tree_pruned,newdata=newtest,type="class") 
+
+newtest$SuccessProb[1:3,]
+
+newtest$SuccessClass[1:3]
+```
+
+So, for another 3 movie that we test, our model predict 2 of them will fail and 1 will success.
+
+### Model testing
+
+The last thing we need to do is testing the accuracy of our model using the sensitivity and the specificity, the false discovery rate and the test accuracy.
+
+```{r}
+
+cross.class.tab<-table(newtest$successful,newtest$SuccessClass) #divide by the sum of the rows 
+
+cross.class.rates<-prop.table(cross.class.tab,1) 
+
+
+#sensitivity 
+sensitivity <- cross.class.rates[2,2]
+cat("The sensitivity value is:", sensitivity)
+
+
+#specificity 
+specificity <- cross.class.rates[1,1]
+cat("The specificity value is:", specificity)
+
+
+#divide by the sum of columns
+cross.class.rates<-prop.table(cross.class.tab,2) 
+
+#False discovery rate 
+FDR <- cross.class.rates[1,2]
+cat("The False discovery rate value is:", FDR)
+
+#Accuracy 
+Accuracy <- sum(diag(cross.class.tab))/sum(cross.class.tab)
+cat("The Accuracy value is:", Accuracy)
+
+```
+
+We can see that the test accuracy is high where 61% of prediction is true. Our model is good at predicting the failed movie which represent by the high specificity value (0.88), in other word this model is useful to avoid loss in movie industry.
+
+
+### Random Forest
+
+Implementing Tree Based Method has a drawback, that is Tree Based Method has high variance and low accuracy, as we have seen on the model, the accuracy is just 61.6%. 
+
+Hence, we need to implement Bagging and random forest to get the lower variance and higher accuracy model.
+
+```{r Bagging}
+
+set.seed(11) 
+bag_train <- randomForest(successful~duration+director_facebook_likes+cast_total_facebook_likes+movie_facebook_likes+imdb_score,data=dataset.train,mtry=6,ntree=200) 
+
+print("This is the output of Bagging Method")
+bag_train
+
+
+```
+
+From the bagging output, the error rate is still high, it is 41.68%, which means the accuracy rate is just 58.32%. Surprisingly it is lower than the accuracy of the single tree.
+
+Now, we implement the random forest method. Here is the output of random forest method.
+
+
+```{r Random Forest}
+
+
+set.seed(11) 
+rf_train <- randomForest(successful~duration+director_facebook_likes+cast_total_facebook_likes+movie_facebook_likes+imdb_score,data=dataset.train,ntree=200) 
+
+rf_train
+```
+
+From the output we can see that the accuracy rate is improved to 62.32% with 37.68% error rate.
+
+It is impossible to visualize the bagging and the random forest because the idea of this technique is bootstrapping the tree. The way we visualize is plotting the gini index. 
+
+Here is the gini index of bagging and random forest method:
+
+```{r Gini Index}
+rf_df<-data_frame(var=rownames(randomForest::importance(rf_train)),
+    `Random forest`=randomForest::importance(rf_train)[,1])%>% left_join(data_frame(var=rownames(randomForest::importance(rf_train)), Bagging=randomForest::importance(bag_train)[,1]))%>% mutate(var=fct_reorder(var,Bagging,median))%>% gather(model,gini,-var) 
+
+rf_ggplot<-ggplot(rf_df,aes(var,gini,color=model,shape=model))+ geom_point()+coord_flip()+ labs(title="Predicting The Successful Movie", x=NULL,y="Average decrease in the Gini Index", color="Method",shape="Method")+ theme(plot.title=element_text(hjust=0.5))
+
+rf_ggplot
+```
+
+We can see from the plot that average decrease of gini index of using random forest technique is bigger for movie_facebook_like and director_facebook_like variable but smaller for duration and cast_total_faceboook_likes.
+
+
+```{r}
+dataset2 = read.csv("group_9.csv")
+
+#finding the median
+med_gross = median(dataset2$gross)
+med_budget = median(dataset2$budget)
+
+#threshold value taking the median
+value= (med_gross-med_budget)/med_budget
+
+
+dataset2 = dataset2 %>%
+  mutate(profit = (gross-budget)/budget) %>% #define profit
+  mutate(successful = ifelse(profit > value, 1, 0)) %>% #define success
+  mutate(successful = as.factor(successful),
+         facenumber_in_poster = as.factor(facenumber_in_poster),
+         color = as.factor(color),
+         title_year = as.factor(title_year),
+         aspect_ratio = as.factor(aspect_ratio))
+
+
+dataset2$successful <- as.numeric(dataset2$successful)
+numeric_data <- select(dataset2, where(is.numeric))
+data_unique <- unique(numeric_data) # Remove duplicates
+
+#Plot all numeric data
+data_unique <- unique(numeric_data) # Remove duplicates
+set.seed(42) # Sets seed for reproducibility
+tsne_out <- Rtsne(as.matrix(data_unique[,1:10])) # Run TSNE
+plot(tsne_out$Y, col = data_unique$successful, asp = 1, xlab = "", ylab = "") # Plot the result
+
+
+#plot significant variable
+data_unique <- unique(numeric_data) # Remove duplicates
+set.seed(42) # Sets seed for reproducibility
+tsne_out <- Rtsne(as.matrix(data_unique[,1:9])) # Run TSNE
+plot(tsne_out$Y, col = data_unique$successful, asp = 1, xlab = "", ylab = "") # Plot the result
+
+#plot significant variable
+data_unique <- unique(numeric_data) # Remove duplicates
+set.seed(42) # Sets seed for reproducibility
+tsne_out <- Rtsne(as.matrix(data_unique[,1:8])) # Run TSNE
+plot(tsne_out$Y, col = data_unique$successful, asp = 1, xlab = "", ylab = "") # Plot the result
+
+```
+
+In a t-SNE (t-distributed stochastic neighbor embedding) plot, the x-axis and y-axis represent the two dimensions of the reduced feature space.
+
+T-SNE is a technique used for data visualization that can reduce the dimensionality of high-dimensional data while preserving its structure. It works by calculating a similarity matrix between the data points in the high-dimensional space and then mapping the points to a lower-dimensional space (usually two-dimensional) in such a way that the similarity between points is preserved as much as possible.
+
+In the resulting t-SNE plot, each point represents a data point, and its location on the x-axis and y-axis reflects its position in the reduced feature space. Points that are close together in the high-dimensional space will also be close together in the t-SNE plot, while points that are far apart in the high-dimensional space will be far apart in the t-SNE plot.
+
+So, the x-axis and y-axis in a t-SNE plot do not have a specific meaning in themselves, but they represent the two dimensions of the reduced feature space that reflect the similarity between the data points.
